@@ -1,0 +1,123 @@
+//@version=5
+strategy("Extreme 3-VWAP Mean Reversion [Final + Signal Status]", 
+     overlay = true,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 100,
+     initial_capital = 100000,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.01,
+     slippage = 1,
+     pyramiding = 0,
+     calc_on_every_tick = false,
+     process_orders_on_close = true)
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS
+// ══════════════════════════════════════════════════════════════
+grp1 = "Strategy Parameters"
+band            = input.float(0.00616, "Band (Deviation)", minval=0.001, step=0.0001, group=grp1)
+adxLength       = input.int(14, "ADX Length", minval=5, group=grp1)
+adxThreshold    = input.float(20.93, "ADX Threshold (Below)", minval=5, step=0.1, group=grp1)
+volMult         = input.float(1.90, "Volume Mult vs MA20", minval=1.0, step=0.05, group=grp1)
+volMultFast     = input.float(1.10, "Volume Mult vs MA10", minval=1.0, step=0.05, group=grp1)
+
+grp2 = "Risk Management"
+slPct           = input.float(0.377, "Stop Loss %", minval=0.05, step=0.01, group=grp2) / 100
+tpPct           = input.float(0.377, "Take Profit %", minval=0.05, step=0.01, group=grp2) / 100
+allowLong       = input.bool(false, "Allow Long", group=grp2)
+allowShort      = input.bool(true,  "Allow Short", group=grp2)
+
+grp3 = "Visuals"
+showVWAPs       = input.bool(true, "Show VWAPs", group=grp3)
+showSignals     = input.bool(true, "Show Historical Signals", group=grp3)
+
+// ══════════════════════════════════════════════════════════════
+// CUSTOM ROLLING VWAP
+// ══════════════════════════════════════════════════════════════
+rollingVWAP(src, len) =>
+    sumSrcVol = ta.sma(src * volume, len) * len
+    sumVol    = ta.sma(volume, len) * len
+    sumVol != 0 ? sumSrcVol / sumVol : src
+
+// ══════════════════════════════════════════════════════════════
+// INDICATORS
+// ══════════════════════════════════════════════════════════════
+var float sessPV = na
+var float sessV  = na
+
+newDay = ta.change(time("D"))
+if newDay or na(sessPV)
+    sessPV := hl2 * volume
+    sessV  := volume
+else
+    sessPV += hl2 * volume
+    sessV  += volume
+
+vwapSession = sessV != 0 ? sessPV / sessV : hl2
+vwap12      = rollingVWAP(hl2, 12)
+vwap78      = rollingVWAP(hl2, 78)
+
+[diPlus, diMinus, adxValue] = ta.dmi(adxLength, adxLength)
+
+volMA20 = ta.sma(volume, 20)
+volMA10 = ta.sma(volume, 10)
+
+// ══════════════════════════════════════════════════════════════
+// CONDITIONS
+// ══════════════════════════════════════════════════════════════
+farAbove = close > vwapSession * (1 + band) and close > vwap12 * (1 + band) and close > vwap78 * (1 + band)
+farBelow = close < vwapSession * (1 - band) and close < vwap12 * (1 - band) and close < vwap78 * (1 - band)
+
+isRanging   = adxValue < adxThreshold
+hasVolume   = volume > volMA20 * volMult and volume > volMA10 * volMultFast
+
+longSignal  = farBelow and isRanging and hasVolume and allowLong
+shortSignal = farAbove and isRanging and hasVolume and allowShort
+
+// ══════════════════════════════════════════════════════════════
+// STRATEGY
+// ══════════════════════════════════════════════════════════════
+if longSignal
+    strategy.entry("Long", strategy.long)
+
+if shortSignal
+    strategy.entry("Short", strategy.short)
+
+if strategy.position_size > 0
+    strategy.exit("Long Exit", from_entry="Long", stop=strategy.position_avg_price*(1-slPct), limit=strategy.position_avg_price*(1+tpPct))
+
+if strategy.position_size < 0
+    strategy.exit("Short Exit", from_entry="Short", stop=strategy.position_avg_price*(1+slPct), limit=strategy.position_avg_price*(1-tpPct))
+
+// ══════════════════════════════════════════════════════════════
+// VISUALS - Ιστορικά σήματα + Κατάσταση ΤΩΡΑ
+// ══════════════════════════════════════════════════════════════
+plot(showVWAPs ? vwapSession : na, "Session VWAP", color=color.new(color.yellow, 0), linewidth=2)
+plot(showVWAPs ? vwap12 : na, "VWAP 12", color=color.new(color.aqua, 30), linewidth=1)
+plot(showVWAPs ? vwap78 : na, "VWAP 78", color=color.new(color.fuchsia, 30), linewidth=1)
+
+// Ιστορικά σήματα (κεριά που πήγαν πίσω)
+plotshape(showSignals and longSignal,  title="LONG",  style=shape.triangleup,   location=location.belowbar, color=color.lime,  size=size.normal, text="L")
+plotshape(showSignals and shortSignal, title="SHORT", style=shape.triangledown, location=location.abovebar, color=color.red,   size=size.normal, text="S")
+
+// Background στα κεριά που είχαν σήμα
+bgcolor(longSignal  ? color.new(color.lime, 85) : na)
+bgcolor(shortSignal ? color.new(color.red, 85)  : na)
+
+// ══════════════════════════════════════════════════════════════
+// ΠΙΝΑΚΑΣ - ΛΕΕΙ ΑΝ ΥΠΑΡΧΕΙ ΣΗΜΑ ΤΩΡΑ
+// ══════════════════════════════════════════════════════════════
+var table statusTable = table.new(position.top_right, 1, 2, bgcolor=color.new(color.black, 70), border_width=1)
+
+if barstate.islast
+    signalNow = longSignal ? "LONG SIGNAL ΤΩΡΑ" : shortSignal ? "SHORT SIGNAL ΤΩΡΑ" : "ΔΕΝ ΥΠΑΡΧΕΙ ΣΗΜΑ"
+    signalColor = longSignal ? color.lime : shortSignal ? color.red : color.gray
+    
+    table.cell(statusTable, 0, 0, "ΚΑΤΑΣΤΑΣΗ ΣΗΜΑΤΟΣ", text_color=color.white, text_size=size.normal)
+    table.cell(statusTable, 0, 1, signalNow, text_color=signalColor, text_size=size.large)
+
+// ══════════════════════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════════════════════
+alertcondition(longSignal,  "Long Signal",  "Extreme 3-VWAP LONG")
+alertcondition(shortSignal, "Short Signal", "Extreme 3-VWAP SHORT")
