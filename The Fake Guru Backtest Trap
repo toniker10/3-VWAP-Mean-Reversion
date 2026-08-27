@@ -1,0 +1,10 @@
+In my opinion, this script serves as a clear demonstration of why quantitative models cannot be evaluated solely on trade outcomes without considering sample distribution:
+
+Insignificant Sample Size: Generating only 20 trade entries across 330,000+ price bars provides zero statistical significance. The sample size is far too small to establish market edge or structural validity.
+
+Anomalous Triggering: Due to extremely restrictive confluence conditions, setups almost exclusively fired during macro volatility spikes (such as the March 2020 liquidity shock and August 2024 volatility clusters).
+
+Execution Friction: High-precision filters operating on tiny price moves remain highly vulnerable to real-world market friction, including spread expansion, execution slippage, and broker fees.
+
+🎯 Conclusion
+The primary purpose of sharing this repository is to demonstrate how stackable confluence parameters reduce trade frequency to statistically irrelevant levels. Always evaluate total trade sample sizes and execution dynamics when analyzing quantitative scripts.
