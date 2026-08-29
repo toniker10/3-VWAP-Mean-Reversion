@@ -21,7 +21,7 @@ A backtest of the `Extreme 3-VWAP Mean Reversion` Pine Script strategy over
 
 The strategy requires **four things at once**:
 1. Price to have diverged sharply from all 3 VWAPs (session, 12, 78)
-2. ADX to be low (i.e. a "calm," sideways market)
+2. ADX to be low (i.e. a calm, sideways market)
 3. Volume to be unusually high (a spike)
 4. (Long signals are disabled by design — `allowLong = false`)
 
